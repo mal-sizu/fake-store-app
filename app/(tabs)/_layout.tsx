@@ -3,17 +3,21 @@ import { useSelector } from 'react-redux';
 import { View, Text, StyleSheet } from 'react-native';
 import { ShoppingCart, Package, User } from 'lucide-react-native';
 import { RootState } from '@/store';
+import { usePathname } from 'expo-router';
 
 export default function TabLayout() {
   const cartItems = useSelector((state: RootState) => state.cart.items);
   const orders = useSelector((state: RootState) => state.orders.orders);
+  const pathname = usePathname();
   
   const cartItemCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const newOrdersCount = orders.filter(order => order.status === 'new').length;
 
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={({ route }) => {
+        
+        return {
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#64748B',
         tabBarStyle: {
@@ -37,7 +41,8 @@ export default function TabLayout() {
         headerTitleStyle: {
           fontSize: 18,
           fontWeight: '600',
-        },
+        }
+      };
       }}
     >
       <Tabs.Screen
@@ -90,6 +95,14 @@ export default function TabLayout() {
             <User size={size} color={color} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="products/[category]"
+        options={{ href: null, headerShown: false }}
+      />
+      <Tabs.Screen
+        name="products/product/[id]"
+        options={{ href: null, headerShown: false }}
       />
     </Tabs>
   );
