@@ -142,7 +142,7 @@ The application uses Firebase Authentication for user management. The authentica
 ### Build for Production
 
 ```bash
-npm run build
+npx expo start
 ```
 
 ### Deploy to Firebase Hosting
