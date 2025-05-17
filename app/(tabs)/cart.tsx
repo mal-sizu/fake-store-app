@@ -1,23 +1,36 @@
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
-import { incrementQuantity, decrementQuantity, removeFromCart } from '@/store/cartSlice';
-import { createOrder } from '@/store/ordersSlice';
+import { incrementQuantity, decrementQuantity, removeFromCart, fetchCart, syncCart, clearFirestoreCart } from '@/store/cartSlice';
+import { createOrderWithFirestore } from '@/store/ordersSlice';
 import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 
 export default function ShoppingCartScreen() {
-  const cartItems = useSelector((state: RootState) => state.cart.items);
+  const { items: cartItems, loading, error } = useSelector((state: RootState) => state.cart);
   const dispatch = useDispatch();
   const { isAuthenticated, user } = useAuth();
 
+  // Fetch cart from Firestore when component mounts
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/(auth)/sign-in');
+      return;
     }
-  }, [isAuthenticated]);
+    
+    if (user?.email) {
+      dispatch(fetchCart(user.email));
+    }
+  }, [isAuthenticated, user, dispatch]);
+  
+  // Sync cart to Firestore when cart items change
+  useEffect(() => {
+    if (isAuthenticated && user?.email && cartItems.length > 0) {
+      dispatch(syncCart({ email: user.email, userId: user.id }));
+    }
+  }, [cartItems, isAuthenticated, user, dispatch]);
 
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalPrice = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -37,14 +50,25 @@ export default function ShoppingCartScreen() {
   const handleCheckout = () => {
     if (cartItems.length === 0) return;
     
-    dispatch(createOrder({
+    const newOrder = {
       id: `ord-${Date.now()}`,
       userId: user?.id || 'guest',
       items: [...cartItems],
       status: 'new',
       total: totalPrice,
       createdAt: new Date().toISOString(),
-    }));
+    };
+    
+    if (user?.email) {
+      // Save order to Firestore
+      dispatch(createOrderWithFirestore({
+        order: newOrder,
+        email: user.email
+      }));
+      
+      // Clear cart in Firestore after creating order
+      dispatch(clearFirestoreCart(user.email));
+    }
     
     // Navigate to orders screen
     router.push('/(tabs)/orders');
@@ -85,6 +109,29 @@ export default function ShoppingCartScreen() {
       </View>
     </View>
   );
+
+  if (loading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={styles.emptyText}>Loading your cart...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.errorText}>Error loading cart</Text>
+        <TouchableOpacity 
+          style={styles.shopButton}
+          onPress={() => user?.email && dispatch(fetchCart(user.email))}
+        >
+          <Text style={styles.shopButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   if (cartItems.length === 0) {
     return (
@@ -177,6 +224,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     color: '#64748b',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#ef4444',
     marginTop: 16,
     marginBottom: 24,
   },

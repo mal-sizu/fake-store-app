@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { ChevronDown, ChevronUp, Package } from 'lucide-react-native';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
-import { updateOrderStatus } from '@/store/ordersSlice';
+import { updateOrderStatusInStore, fetchOrdersFromFirestore } from '@/store/ordersSlice';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 
 export default function OrdersScreen() {
-  const { orders } = useSelector((state: RootState) => state.orders);
+  const { orders, loading, error } = useSelector((state: RootState) => state.orders);
   const { isAuthenticated, user } = useAuth();
   const dispatch = useDispatch();
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
@@ -16,8 +16,14 @@ export default function OrdersScreen() {
   useEffect(() => {
     if (!isAuthenticated) {
       router.replace('/(auth)/sign-in');
+      return;
     }
-  }, [isAuthenticated]);
+    
+    // Fetch orders from Firestore when component mounts
+    if (user?.email) {
+      dispatch(fetchOrdersFromFirestore(user.email));
+    }
+  }, [isAuthenticated, user, dispatch]);
 
   // Filter orders for the current user
   const userOrders = user?.id 
@@ -33,7 +39,13 @@ export default function OrdersScreen() {
   };
 
   const handleUpdateStatus = (orderId: string, newStatus: string) => {
-    dispatch(updateOrderStatus({ orderId, status: newStatus }));
+    if (user?.email) {
+      dispatch(updateOrderStatusInStore({ 
+        email: user.email,
+        orderId, 
+        status: newStatus 
+      }));
+    }
   };
 
   const renderOrderItem = ({ item }: { item: any }) => {
@@ -111,6 +123,29 @@ export default function OrdersScreen() {
     );
   };
 
+  if (loading) {
+    return (
+      <View style={styles.emptyContainer}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={styles.emptyText}>Loading your orders...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.emptyContainer}>
+        <Text style={styles.errorText}>Error loading orders</Text>
+        <TouchableOpacity 
+          style={styles.shopButton}
+          onPress={() => user?.email && dispatch(fetchOrdersFromFirestore(user.email))}
+        >
+          <Text style={styles.shopButtonText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   if (userOrders.length === 0) {
     return (
       <View style={styles.emptyContainer}>
@@ -170,6 +205,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     color: '#64748b',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#ef4444',
     marginTop: 16,
     marginBottom: 24,
   },
